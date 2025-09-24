@@ -1,3 +1,8 @@
+<!--
+  단일 HTML 데모 페이지.
+  API Base와 Bot ID를 입력받아 localStorage에 저장하고, 세션 ID를 유지하며 latency/tokens 지표를 표시한다.
+  브라우저에서 직접 호출하므로 CORS 설정(예: :8000)과 포트 구성을 반드시 확인한다.
+-->
 <!doctype html>
 <html lang="ko">
 <head>
@@ -144,7 +149,7 @@
         localStorage.getItem(LS.botId) ||
         defaultBotId;
 
-    // 세션 유지
+    // 세션 보관: 이전 대화 sessionId를 localStorage에서 복원
     let sessionId = localStorage.getItem(LS.session) || null;
 
     const log = document.getElementById('log');
@@ -218,6 +223,7 @@
         const sendingAt = performance.now();
 
         try {
+            // fetch 호출: 타임아웃 옵션과 JSON 본문을 설정해 API를 직접 호출
             const res = await fetchWithTimeout(url, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -238,14 +244,14 @@
             }
 
             const data = await res.json();
-            saveSession(data.sessionId);
+            saveSession(data.sessionId); // 응답 sessionId를 저장해 이후 대화를 이어감
             const latency = typeof data.latencyMs === 'number'
                 ? `${data.latencyMs} ms`
                 : `${Math.round(performance.now() - sendingAt)} ms`;
             const tokens = data.usage
                 ? `tokens p:${data.usage.promptTokens ?? '-'} c:${data.usage.completionTokens ?? '-'}`
                 : '';
-            addBubble('assistant', data.answer || '(응답 없음)', `${latency}${tokens ? ` • ${tokens}` : ''}`);
+            addBubble('assistant', data.answer || '(응답 없음)', `${latency}${tokens ? ` • ${tokens}` : ''}`); // UI 업데이트: 응답/메타 정보 출력
 
         } catch (err) {
             if (err?.name === 'AbortError') {
@@ -255,7 +261,7 @@
             }
         } finally {
             sendBtn.disabled = false;
-            input.focus();
+            input.focus(); // 에러 여부와 관계없이 입력 포커스 복구
         }
     });
 

@@ -19,6 +19,10 @@ import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
+/**
+ * ChatController 슬라이스 테스트.
+ * <p>/v1/chat 엔드포인트가 정상 응답/유효성 검증 오류를 올바르게 처리하는지 검증한다.</p>
+ */
 @WebMvcTest(controllers = ChatController.class)
 class ChatControllerTest {
 
@@ -30,6 +34,7 @@ class ChatControllerTest {
     @DisplayName("POST /v1/chat returns chat response")
     @Test
     void chat_success() throws Exception {
+        // Given
         ChatUsage usage = new ChatUsage(10, 12);
         ChatResult result = new ChatResult("Echo: hello", "session-123", usage);
         given(chatService.chat(any(ChatRequest.class))).willReturn(result);
@@ -38,9 +43,11 @@ class ChatControllerTest {
         request.setBotId("bot-1");
         request.setMessage("hello");
 
+        // When
         mockMvc.perform(post("/v1/chat")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
+                // Then
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.answer", is("Echo: hello")))
                 .andExpect(jsonPath("$.sessionId", is("session-123")))
@@ -52,12 +59,15 @@ class ChatControllerTest {
     @DisplayName("POST /v1/chat validates required fields")
     @Test
     void chat_missingRequiredFields() throws Exception {
-        ChatRequest request = new ChatRequest(); // botId 누락
+        // Given: botId 누락 시 400 반환 보장
+        ChatRequest request = new ChatRequest();
         request.setMessage("hello");
 
+        // When
         mockMvc.perform(post("/v1/chat")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
+                // Then
                 .andExpect(status().isBadRequest());
     }
 }
