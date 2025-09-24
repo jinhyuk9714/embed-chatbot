@@ -1,4 +1,4 @@
-package com.example.embed_chatbot.config;
+package com.example.embedchatbot.config;
 
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;

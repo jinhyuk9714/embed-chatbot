@@ -1,4 +1,4 @@
-package com.example.embed_chatbot;
+package com.example.embedchatbot.controller;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
