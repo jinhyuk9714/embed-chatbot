@@ -1,2 +1,14 @@
 server:
   port: 9000
+app:
+  llm:
+    # 환경변수로 덮어쓰기: OPENAI_API_KEY, OPENAI_MODEL, OPENAI_BASE_URL
+    provider: openai
+    model: ${OPENAI_MODEL:gpt-4o-mini}
+    base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
+    api-key: ${OPENAI_API_KEY:}
+    timeout-ms: 15000
+logging:
+  level:
+    com.example.embedchatbot: INFO     # 우리 코드 전반을 DEBUG로
+    org.springframework.web: INFO       # 스프링 웹 로그는 너무 시끄럽지 않게
