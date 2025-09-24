@@ -1,3 +1,8 @@
+/*
+ * OpenAI LLM 클라이언트 구현 파일.
+ * - WebClient를 통해 /chat/completions REST API를 호출한다.
+ * - API 키, 모델명, 조직 헤더 등은 환경변수/설정으로 주입된다.
+ */
 package com.example.embedchatbot.service;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -16,6 +21,11 @@ import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
+/**
+ * OpenAI Chat Completions API를 호출하는 기본 구현체.
+ * <p>책임: HTTP 요청 생성, 429 재시도, 응답 파싱을 수행한다.</p>
+ * <p>주의: WebClient는 동기 {@code block()} 호출을 사용하므로 스레드 풀 고갈에 유의한다.</p>
+ */
 @Component
 public class OpenAiLlmClient implements LlmClient {
 
@@ -31,6 +41,12 @@ public class OpenAiLlmClient implements LlmClient {
     @Value("${OPENAI_PROJECT:}")
     private String project;
 
+    /**
+     * 구성 요소를 주입 받아 OpenAI 클라이언트를 초기화한다.
+     * @param openAiWebClient {@link com.example.embedchatbot.config.LlmConfig}에서 제공한 WebClient
+     * @param apiKey OpenAI API 키(환경변수/설정으로 주입)
+     * @param model 사용할 Chat Completions 모델명
+     */
     public OpenAiLlmClient(
             WebClient openAiWebClient,
             @Value("${app.llm.api-key:}") String apiKey,
@@ -45,6 +61,20 @@ public class OpenAiLlmClient implements LlmClient {
         return apiKey != null && !apiKey.isBlank();
     }
 
+    /**
+     * OpenAI Chat Completions API를 호출해 텍스트를 생성한다.
+     * <p>429(Too Many Requests) 재시도 전략:</p>
+     * <pre>
+     * attempt1: 약 400ms + Retry-After + ±100ms 지터
+     * attempt2: 약 800ms + Retry-After + ±100ms 지터
+     * attempt3: 약 1600ms + Retry-After + ±100ms 지터
+     * (마지막 4번째 시도는 대기 없이 예외 전파 → ChatService에서 Echo 폴백 처리)
+     * </pre>
+     * @param systemPrompt 시스템 지침 메시지 (nullable)
+     * @param userMessage 사용자 메시지
+     * @return LLM이 생성한 응답 문자열
+     * @throws Exception 네트워크 오류, 429 초과 재시도, quota 초과 등 복구 불가 상황
+     */
     @Override
     public String generate(String systemPrompt, String userMessage) throws Exception {
         if (!enabled()) {
@@ -134,7 +164,12 @@ public class OpenAiLlmClient implements LlmClient {
         public String finishReason;
     }
 
-    /** Retry-After 헤더를 ms로 변환 (초 or HTTP-date) */
+    /**
+     * Retry-After 헤더 값을 밀리초 단위로 변환한다.
+     * <p>숫자(초) 또는 RFC 7231 HTTP-date 포맷을 모두 지원한다.</p>
+     * @param ra Retry-After 헤더 문자열
+     * @return 대기해야 할 시간(ms). 파싱 실패 시 0
+     */
     private long parseRetryAfterToMillis(String ra) {
         if (ra == null || ra.isBlank()) return 0L;
         if (ra.matches("\\d+")) {

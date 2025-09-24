@@ -1,5 +1,9 @@
 name: E2E
 
+# OpenAI 실계정을 사용한 엔드투엔드 검증 파이프라인.
+# 조건: secrets.OPENAI_API_KEY가 설정된 경우에만 실행하며, 수동 트리거(workflow_dispatch)로 운영자가 필요 시 수행.
+# 타임아웃: GitHub Actions 기본 6시간이지만, app 기동/테스트를 15분 이내로 마치는 것을 목표.
+
 on:
   workflow_dispatch:   # 수동 트리거
 
@@ -8,6 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ secrets.OPENAI_API_KEY != '' }}
 
+    # E2E는 실제 OpenAI 호출을 수행하므로 테스트 병렬성 대신 직렬 실행을 택한다.
     steps:
       - uses: actions/checkout@v4
 
@@ -39,6 +44,7 @@ jobs:
           OPENAI_MODEL: gpt-4o-mini
         run: ./mvnw -B -q -P e2e verify
 
+      # 실패 시 앱 로그를 아티팩트 대신 콘솔로 출력하여 디버깅 시간을 단축
       - name: Show app logs on failure
         if: failure()
         run: |

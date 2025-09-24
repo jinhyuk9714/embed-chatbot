@@ -1,5 +1,8 @@
 name: CI
 
+# PR/메인 브랜치에서 빌드/테스트를 자동 검증하는 기본 파이프라인.
+# 트리거: main 브랜치 push 및 모든 PR. 실패 시 GitHub Checks에서 로그 확인.
+
 on:
   push:
     branches: [ main ]
@@ -14,6 +17,7 @@ jobs:
   build-test:
     runs-on: ubuntu-latest
 
+    # Java 17 LTS 환경에서 Spring Boot 애플리케이션을 검증 (예상 3분 내, 15분 이내 완료 목표)
     # 이 Job이 GitHub 리포 콘텐츠만 읽으면 되므로 최소 권한
     permissions:
       contents: read

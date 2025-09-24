@@ -1,4 +1,6 @@
 <!doctype html>
+<!-- 데모용 단일 HTML. API Base/Bot ID 입력을 localStorage에 보관하여 새로고침 후 유지 -->
+<!-- 응답 아래 latencyMs/토큰 표시로 성능/비용 감을 제공. CORS/포트 일치 필요(127.0.0.1 vs localhost 혼용 주의). -->
 <html lang="ko">
 <head>
     <meta charset="utf-8"/>
@@ -144,7 +146,7 @@
         localStorage.getItem(LS.botId) ||
         defaultBotId;
 
-    // 세션 유지
+    // 세션 유지: 서버에서 받은 sessionId를 localStorage에 저장해 대화 맥락 지속
     let sessionId = localStorage.getItem(LS.session) || null;
 
     const log = document.getElementById('log');
@@ -152,6 +154,7 @@
     const input = document.getElementById('q');
     const sendBtn = document.getElementById('sendBtn');
 
+    // 메시지 버블 생성: 역할에 따라 정렬하고 latency/tokens 메타 정보를 함께 렌더링
     function addBubble(role, text, meta) {
         const wrap = document.createElement('div');
         wrap.className = `msg ${role}`;
@@ -168,6 +171,7 @@
         log.scrollTop = log.scrollHeight;
     }
 
+    // 에러 메시지를 붉은색으로 표시해 사용자에게 즉시 피드백 제공
     function addError(text) {
         const wrap = document.createElement('div');
         wrap.className = 'msg assistant error';
@@ -176,13 +180,14 @@
         log.scrollTop = log.scrollHeight;
     }
 
+    // 서버에서 회신한 세션 ID를 저장해 이후 요청 시 reuse
     function saveSession(id) {
         if (!id) return;
         sessionId = id;
         localStorage.setItem(LS.session, id);
     }
 
-    // 사용자가 API_BASE/BOT_ID 바꾸면 저장
+    // 사용자가 API_BASE/BOT_ID 바꾸면 저장하여 새로고침 후에도 유지
     apiBaseInput.addEventListener('change', () => {
         localStorage.setItem(LS.apiBase, apiBaseInput.value.trim());
     });
@@ -190,7 +195,7 @@
         localStorage.setItem(LS.botId, botIdInput.value.trim());
     });
 
-    // fetch 타임아웃 유틸 (AbortController)
+    // fetch 타임아웃 유틸 (AbortController): 네트워크 지연 시 자동 취소하여 UI가 멈추지 않도록 함
     async function fetchWithTimeout(resource, options = {}) {
         const {timeout = 15000} = options;
         const controller = new AbortController();
@@ -212,12 +217,14 @@
         const botId = botIdInput.value.trim() || defaultBotId;
         const url = `${apiBase}/v1/chat`;
 
+        // UI 즉시 업데이트: 사용자 메시지를 먼저 추가하고 입력창 초기화
         addBubble('user', text);
         input.value = '';
         sendBtn.disabled = true;
         const sendingAt = performance.now();
 
         try {
+            // LLM 호출: latency 측정을 위해 시작 시각을 기록하고 fetchWithTimeout 사용
             const res = await fetchWithTimeout(url, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -239,6 +246,7 @@
 
             const data = await res.json();
             saveSession(data.sessionId);
+            // latency와 토큰 추정치를 메타 정보로 표시해 사용자에게 비용/성능 피드백 제공
             const latency = typeof data.latencyMs === 'number'
                 ? `${data.latencyMs} ms`
                 : `${Math.round(performance.now() - sendingAt)} ms`;
@@ -248,18 +256,20 @@
             addBubble('assistant', data.answer || '(응답 없음)', `${latency}${tokens ? ` • ${tokens}` : ''}`);
 
         } catch (err) {
+            // 오류 처리: 타임아웃과 기타 예외를 구분해 사용자 메시지를 달리 출력
             if (err?.name === 'AbortError') {
                 addError('요청이 타임아웃되었습니다. (네트워크 지연/서버 과부하)');
             } else {
                 addError(`요청 중 오류가 발생했습니다: ${err}`);
             }
         } finally {
+            // Finally: 버튼 상태를 원복하고 입력 포커스를 되돌려 빠른 재시도를 돕는다
             sendBtn.disabled = false;
             input.focus();
         }
     });
 
-    // 처음 들어왔을 때 현재 설정 상태 안내
+    // 처음 들어왔을 때 현재 설정 상태 안내: 사용자가 즉시 기능을 이해하도록 기본 도움말 표시
     addBubble('assistant',
         '안녕하세요! 메시지를 입력해 대화를 시작하세요.\n' +
         '- API Base: 상단 입력칸에서 변경 가능 (예: http://localhost:9000)\n' +
