@@ -1,5 +1,6 @@
 name: CI (Build & Unit Test)
 
+# 기본 트리거: main 브랜치 push 및 PR 이벤트에 반응
 on:
   push:
     branches: [ main ]
@@ -26,7 +27,7 @@ jobs:
 
     # (정말 필요한 경우가 아니라면) 전역 모델/키는 CI에 두지 않는 것을 권장
     # env:
-    #   OPENAI_MODEL: gpt-4o-mini
+    #   OPENAI_MODEL: gpt-4o-mini  # 필요 시 여기에서 secrets.OPENAI_API_KEY 등을 주입
 
     steps:
       - name: Checkout
@@ -34,6 +35,7 @@ jobs:
         with:
           fetch-depth: 0  # (선택) 버전/태그 쓸 일 있으면 전체 히스토리
 
+      # Temurin 기반 JDK 17을 설치하고 Maven 캐시 사용
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -44,6 +46,7 @@ jobs:
       - name: Ensure mvnw is executable
         run: chmod +x ./mvnw
 
+      # mvn verify를 실행해 빌드 + 단위 테스트(Surefire) 수행
       - name: Build & Unit Test (Surefire only)
         # ✅ 유닛 테스트만: Failsafe *IT.java는 pom.xml의 <skipITs>true</skipITs> 덕에 스킵됨
         #    유닛에서 OpenAI 호출이 없다면 키 주입도 불필요 → 보안상 더 안전

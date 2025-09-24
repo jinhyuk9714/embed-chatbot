@@ -6,17 +6,18 @@ on:
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 30  # 장시간 실행 방지를 위한 상한 설정
 
     permissions:
       contents: read
 
-    # ✅ secrets를 job env로 먼저 주입
+    # ✅ secrets를 job env로 먼저 주입 (없으면 아래 가드에서 종료)
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_MODEL: gpt-4o-mini
 
     steps:
+      # OPENAI_API_KEY 미설정 시 빠르게 종료해 비용 낭비 방지
       - name: Check secret presence (skip gracefully if missing)
         if: ${{ env.OPENAI_API_KEY == '' }}
         run: |
@@ -37,10 +38,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y curl netcat-openbsd
 
+      # 통합 테스트 전 애플리케이션을 빌드 (테스트 스킵)
       - name: Build app (no tests)
         if: ${{ env.OPENAI_API_KEY != '' }}
         run: ./mvnw -B -q -DskipTests clean package
 
+      # 애플리케이션을 백그라운드로 실행하고 헬스체크 성공까지 대기
       - name: Run app in background
         if: ${{ env.OPENAI_API_KEY != '' }}
         run: |
@@ -59,10 +62,12 @@ jobs:
           # 마지막 확인 (실패 시 로그 출력 후 종료)
           curl -fsS http://127.0.0.1:9000/health || (echo "App failed to start"; tail -n 200 app.log; exit 1)
 
+      # Failsafe 기반 E2E 테스트 수행 (-P e2e)
       - name: Run E2E tests (-P e2e)
         if: ${{ env.OPENAI_API_KEY != '' }}
         run: ./mvnw -B -q -P e2e -DskipITs=false verify
 
+      # 실패 시 로그/리포트를 아티팩트로 업로드해 원인 파악
       - name: Upload logs & reports on failure
         if: ${{ failure() && env.OPENAI_API_KEY != '' }}
         uses: actions/upload-artifact@v4
@@ -73,6 +78,7 @@ jobs:
             target/surefire-reports/*
             target/failsafe-reports/*
 
+      # 항상 마지막에 백그라운드 프로세스를 정리
       - name: Stop app
         if: ${{ always() && env.OPENAI_API_KEY != '' }}
         run: |

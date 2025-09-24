@@ -1,3 +1,8 @@
+/*
+ * OpenAI 호환 WebClient 기반 LLM 클라이언트 구현체.
+ * 환경 변수로 주입된 모델/키/조직 정보와 Reactor WebClient를 사용해 동기 응답을 생성한다.
+ * 타임아웃, Retry-After 파싱, 429 재시도 정책을 포함하며, 실패 시 상위 서비스가 Echo 폴백을 실행한다.
+ */
 package com.example.embedchatbot.service;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -16,6 +21,11 @@ import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
+/**
+ * OpenAI Chat Completions API를 호출하는 기본 구현체.
+ * <p>애플리케이션 시작 시 주입된 WebClient를 사용하며, API 키 미설정 시 enabled()가 false를 반환한다.
+ * 429 응답 시 백오프 + Retry-After를 조합해 재시도하고, 최종 실패는 상위 서비스가 Echo 폴백으로 처리한다.</p>
+ */
 @Component
 public class OpenAiLlmClient implements LlmClient {
 
@@ -45,12 +55,24 @@ public class OpenAiLlmClient implements LlmClient {
         return apiKey != null && !apiKey.isBlank();
     }
 
+    /**
+     * OpenAI Chat Completions API를 호출해 응답을 생성한다.
+     * <p>재시도 정책 요약:</p>
+     * <ul>
+     *     <li>attempt1: 250ms 기본 대기(현재 구현은 400ms 기반 백오프 + ±100ms 지터 적용)</li>
+     *     <li>attempt2: 500ms 기본 대기(지터/Retry-After에 따라 추가 지연)</li>
+     *     <li>attempt3: 1000ms 기본 대기(서버 Retry-After가 있으면 더 대기)</li>
+     * </ul>
+     * <p>각 단계는 Retry-After 헤더(초)를 추가로 고려하며, 마지막 시도 실패 시 예외를 전파해
+     * 상위(ChatService)가 Echo 폴백을 수행한다.</p>
+     */
     @Override
     public String generate(String systemPrompt, String userMessage) throws Exception {
         if (!enabled()) {
             throw new IllegalStateException("OPENAI_API_KEY not configured");
         }
 
+        // WebClient 요청 본문 구성: system/user 메시지를 모델과 함께 전달
         var req = new ChatCompletionsRequest(
                 model,
                 List.of(
@@ -64,6 +86,7 @@ public class OpenAiLlmClient implements LlmClient {
 
         for (int attempt = 1; attempt <= maxRetry; attempt++) {
             try {
+                // POST /chat/completions 호출 시 인증/조직 헤더를 주입하고 JSON 요청을 전달
                 ChatCompletionsResponse resp = webClient.post()
                         .uri("/chat/completions")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -75,6 +98,7 @@ public class OpenAiLlmClient implements LlmClient {
                         .bodyValue(req)
                         .retrieve()
                         .bodyToMono(ChatCompletionsResponse.class)
+                        // 동기 흐름(ChatService)과 맞추기 위해 block() 사용 (WebFlux 비동기 전파 불필요)
                         .block();
 
                 if (resp == null || resp.choices == null || resp.choices.isEmpty()
@@ -84,7 +108,7 @@ public class OpenAiLlmClient implements LlmClient {
                 return resp.choices.get(0).message.content;
 
             } catch (WebClientResponseException.TooManyRequests e) {
-                // 429 처리: 쿼터부족이면 즉시 중단, 그 외에는 백오프 후 재시도
+                // 429 처리: 쿼터 부족이면 즉시 상위로 전달, 그 외에는 백오프 후 재시도
                 String body = e.getResponseBodyAsString();
                 boolean quota = body != null && body.contains("insufficient_quota");
                 if (quota) {

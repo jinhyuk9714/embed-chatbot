@@ -9,11 +9,16 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * LLM과 실제 통신하는 엔드투엔드 테스트.
+ * <p>실제 서버와 OpenAI 키가 준비된 환경에서 Echo 폴백이 아닌 LLM 응답이 반환되는지 검증한다.</p>
+ */
 @Tag("e2e") // -P e2e에서만 실행
 class E2eChatIT {
 
     @Test
     void chat_should_return_llm_answer_not_echo() {
+        // Given: 서버와 OPENAI_API_KEY가 준비되어 있을 때
         // 전제: 서버가 9000 포트로 떠있고, OPENAI_API_KEY 환경변수가 설정되어 있어야 함
         RestTemplate rt = new RestTemplate();
         String url = "http://127.0.0.1:9000/v1/chat";
@@ -22,8 +27,10 @@ class E2eChatIT {
         var headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
 
+        // When: 실제 REST 호출 수행
         ResponseEntity<Map> res = rt.exchange(url, HttpMethod.POST, new HttpEntity<>(body, headers), Map.class);
 
+        // Then: 200 OK + Echo가 아닌 응답을 확인
         assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
         Object answer = res.getBody().get("answer");
         assertThat(answer).isInstanceOf(String.class);

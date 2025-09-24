@@ -1,13 +1,15 @@
+# 개발 기본값. 운영 환경에서는 환경변수로 오버라이드 권장.
+# OPENAI_API_KEY / OPENAI_MODEL / OPENAI_BASE_URL
+# (IntelliJ: Run/Debug Config → Environment variables에 설정)
 server:
   port: 9000
 app:
   llm:
-    # 환경변수로 덮어쓰기: OPENAI_API_KEY, OPENAI_MODEL, OPENAI_BASE_URL
-    provider: openai
-    model: ${OPENAI_MODEL:gpt-4o-mini}
-    base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
-    api-key: ${OPENAI_API_KEY:}
-    timeout-ms: 15000
+    provider: openai              # 사용 중인 LLM 공급자 식별자 (다른 공급자 사용 시 교체)
+    model: ${OPENAI_MODEL:gpt-4o-mini}   # 기본 모델명, 운영은 환경변수 OPENAI_MODEL로 교체 권장
+    base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}  # API 엔드포인트. 사설 프록시 사용 시 이 값을 변경
+    api-key: ${OPENAI_API_KEY:}   # 인증 토큰. 기본값 없음 → 운영/로컬 실행 시 환경변수로 주입
+    timeout-ms: 15000             # 외부 LLM 응답 대기 타임아웃(ms). 네트워크 품질에 따라 조정
 logging:
   level:
     com.example.embedchatbot: DEBUG     # 우리 코드 전반을 DEBUG로
