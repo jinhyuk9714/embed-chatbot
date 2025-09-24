@@ -1,0 +1,1 @@
+- mvn spring-boot:run (기본 포트가 9000이 되도록 위 설정 반영)
