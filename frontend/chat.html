@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Embed Chatbot</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: "Pretendard", "Noto Sans KR", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: linear-gradient(160deg, #0d1b2a 0%, #1b263b 100%);
+      color: #f1f5f9;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 24px;
+    }
+
+    .chat-card {
+      width: min(640px, 100%);
+      background: rgba(15, 23, 42, 0.85);
+      border-radius: 18px;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      box-shadow: 0 20px 45px rgba(15, 23, 42, 0.35);
+      padding: clamp(20px, 4vw, 36px);
+      backdrop-filter: blur(12px);
+    }
+
+    h1 {
+      margin: 0 0 24px;
+      font-size: clamp(28px, 6vw, 36px);
+      font-weight: 700;
+      text-align: center;
+      letter-spacing: -0.02em;
+    }
+
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    label {
+      font-weight: 600;
+      font-size: 14px;
+      color: #cbd5f5;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 140px;
+      padding: 16px;
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      background-color: rgba(15, 23, 42, 0.5);
+      color: inherit;
+      font-size: 16px;
+      resize: vertical;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: #60a5fa;
+      box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
+    }
+
+    button {
+      appearance: none;
+      border: none;
+      border-radius: 999px;
+      padding: 14px 22px;
+      background: linear-gradient(135deg, #38bdf8, #6366f1);
+      color: white;
+      font-weight: 600;
+      font-size: 16px;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 25px rgba(79, 70, 229, 0.35);
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .response {
+      margin-top: 20px;
+      padding: 18px;
+      border-radius: 12px;
+      background-color: rgba(100, 116, 139, 0.1);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      font-size: 15px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+      display: none;
+    }
+
+    .error {
+      border-color: rgba(248, 113, 113, 0.5);
+      background-color: rgba(248, 113, 113, 0.1);
+      color: #fecaca;
+    }
+
+    @media (max-width: 480px) {
+      body {
+        padding: 16px;
+      }
+
+      .chat-card {
+        padding: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="chat-card">
+    <h1>Embed Chatbot</h1>
+    <form id="chat-form">
+      <div>
+        <label for="message">메시지</label>
+        <textarea id="message" name="message" placeholder="궁금한 내용을 입력하세요" required></textarea>
+      </div>
+      <button type="submit" id="submit-btn">전송</button>
+    </form>
+    <section id="response" class="response" aria-live="polite"></section>
+  </main>
+
+  <script>
+    const form = document.getElementById('chat-form');
+    const messageEl = document.getElementById('message');
+    const responseEl = document.getElementById('response');
+    const submitBtn = document.getElementById('submit-btn');
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const userMessage = messageEl.value.trim();
+      if (!userMessage) {
+        messageEl.focus();
+        return;
+      }
+
+      responseEl.style.display = 'block';
+      responseEl.classList.remove('error');
+      responseEl.textContent = '응답을 기다리는 중...';
+      submitBtn.disabled = true;
+
+      try {
+        const res = await fetch('http://127.0.0.1:9000/v1/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            messages: [
+              {
+                role: 'user',
+                content: userMessage
+              }
+            ]
+          })
+        });
+
+        if (!res.ok) {
+          throw new Error(`서버 응답 오류: ${res.status}`);
+        }
+
+        const data = await res.json();
+        const content = data?.choices?.[0]?.message?.content ?? '응답을 가져올 수 없습니다.';
+        responseEl.textContent = content;
+      } catch (error) {
+        console.error(error);
+        responseEl.classList.add('error');
+        responseEl.textContent = '요청 중 오류가 발생했습니다. 서버가 실행 중인지 확인해주세요.';
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
