@@ -5,11 +5,23 @@
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <title>Chat • BOT_123</title>
     <style>
+        :root {
+            --bg: #fafafa;
+            --card: #fff;
+            --bd: #e5e7eb;
+            --text: #111;
+            --muted: #6b7280;
+        }
+
+        * {
+            box-sizing: border-box
+        }
+
         body {
             font-family: ui-sans-serif, system-ui;
             margin: 0;
             padding: 24px;
-            background: #fafafa
+            background: var(--bg)
         }
 
         .wrap {
@@ -20,14 +32,15 @@
         .box {
             height: 60vh;
             overflow: auto;
-            border: 1px solid #e5e7eb;
-            background: #fff;
+            border: 1px solid var(--bd);
+            background: var(--card);
             border-radius: 12px;
             padding: 12px
         }
 
         .msg {
-            margin: 8px 0
+            margin: 8px 0;
+            line-height: 1.45
         }
 
         .user {
@@ -39,13 +52,24 @@
             white-space: pre-wrap
         }
 
+        .meta {
+            color: var(--muted);
+            font-size: 12px;
+            margin-top: 2px
+        }
+
+        .error {
+            color: #b91c1c;
+            white-space: pre-wrap
+        }
+
         form {
             display: flex;
             gap: 8px;
             margin-top: 12px
         }
 
-        input {
+        input[type="text"] {
             flex: 1;
             padding: 10px;
             border: 1px solid #ddd;
@@ -56,57 +80,191 @@
             padding: 10px 16px;
             border: 0;
             border-radius: 8px;
-            background: #111;
+            background: var(--text);
             color: #fff;
             cursor: pointer
+        }
+
+        button[disabled] {
+            opacity: .6;
+            cursor: not-allowed
+        }
+
+        .row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px
+        }
+
+        .row > input {
+            flex: 1
         }
     </style>
 </head>
 <body>
 <div class="wrap">
     <h1>Chat • BOT_123</h1>
-    <div id="log" class="box"></div>
+
+    <!-- 환경 설정 행: API_BASE / BOT_ID -->
+    <div class="row">
+        <input id="apiBase" placeholder="API Base (예: http://127.0.0.1:9000)"/>
+        <input id="botId" placeholder="Bot ID"/>
+    </div>
+
+    <div id="log" class="box" aria-live="polite"></div>
+
     <form id="f">
-        <input id="q" placeholder="질문을 입력하세요" autocomplete="off"/>
-        <button>보내기</button>
+        <input id="q" type="text" placeholder="질문을 입력하세요" autocomplete="off"/>
+        <button id="sendBtn" type="submit">보내기</button>
     </form>
 </div>
+
 <script>
-    // ← 백엔드 포트가 9000이 맞는지 확인! (8080이면 8080으로 바꾸기)
-    const API = "http://127.0.0.1:9000/v1/chat";
-
-    const log = document.getElementById('log');
-    const f = document.getElementById('f');
-    const q = document.getElementById('q');
-    let sessionId = null;
-
-    const add = (role, text) => {
-        const d = document.createElement('div');
-        d.className = `msg ${role}`;
-        d.textContent = text;
-        log.appendChild(d);
-        log.scrollTop = log.scrollHeight;
+    // ---- 사용자가 쉽게 바꿀 수 있게 기본값/쿼리스트링/로컬스토리지로 API_BASE/BOT_ID를 관리
+    const qs = new URLSearchParams(location.search);
+    const LS = {
+        session: 'chat.sessionId',
+        apiBase: 'chat.apiBase',
+        botId: 'chat.botId',
     };
 
-    f.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const text = q.value.trim();
-        if (!text) return;
-        add('user', text);
-        q.value = '';
+    const apiBaseInput = document.getElementById('apiBase');
+    const botIdInput = document.getElementById('botId');
 
-        const res = await fetch(API, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                botId: 'BOT_123', sessionId, message: text,
-                meta: {lang: navigator.language}
-            })
-        });
-        const data = await res.json();
-        sessionId = data.sessionId || sessionId;
-        add('assistant', data.answer || '(응답 없음)');
+    const defaultApiBase = 'http://127.0.0.1:9000';
+    const defaultBotId = 'BOT_123';
+
+    apiBaseInput.value =
+        qs.get('apiBase') ||
+        localStorage.getItem(LS.apiBase) ||
+        defaultApiBase;
+
+    botIdInput.value =
+        qs.get('botId') ||
+        localStorage.getItem(LS.botId) ||
+        defaultBotId;
+
+    // 세션 유지
+    let sessionId = localStorage.getItem(LS.session) || null;
+
+    const log = document.getElementById('log');
+    const form = document.getElementById('f');
+    const input = document.getElementById('q');
+    const sendBtn = document.getElementById('sendBtn');
+
+    function addBubble(role, text, meta) {
+        const wrap = document.createElement('div');
+        wrap.className = `msg ${role}`;
+        const line = document.createElement('div');
+        line.textContent = text; // XSS 안전: textContent 사용
+        wrap.appendChild(line);
+        if (meta) {
+            const m = document.createElement('div');
+            m.className = 'meta';
+            m.textContent = meta;
+            wrap.appendChild(m);
+        }
+        log.appendChild(wrap);
+        log.scrollTop = log.scrollHeight;
+    }
+
+    function addError(text) {
+        const wrap = document.createElement('div');
+        wrap.className = 'msg assistant error';
+        wrap.textContent = text;
+        log.appendChild(wrap);
+        log.scrollTop = log.scrollHeight;
+    }
+
+    function saveSession(id) {
+        if (!id) return;
+        sessionId = id;
+        localStorage.setItem(LS.session, id);
+    }
+
+    // 사용자가 API_BASE/BOT_ID 바꾸면 저장
+    apiBaseInput.addEventListener('change', () => {
+        localStorage.setItem(LS.apiBase, apiBaseInput.value.trim());
     });
+    botIdInput.addEventListener('change', () => {
+        localStorage.setItem(LS.botId, botIdInput.value.trim());
+    });
+
+    // fetch 타임아웃 유틸 (AbortController)
+    async function fetchWithTimeout(resource, options = {}) {
+        const {timeout = 15000} = options;
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), timeout);
+        try {
+            const res = await fetch(resource, {...options, signal: controller.signal});
+            return res;
+        } finally {
+            clearTimeout(id);
+        }
+    }
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const text = input.value.trim();
+        if (!text) return;
+
+        const apiBase = apiBaseInput.value.trim().replace(/\/$/, '');
+        const botId = botIdInput.value.trim() || defaultBotId;
+        const url = `${apiBase}/v1/chat`;
+
+        addBubble('user', text);
+        input.value = '';
+        sendBtn.disabled = true;
+        const sendingAt = performance.now();
+
+        try {
+            const res = await fetchWithTimeout(url, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    botId,
+                    message: text,
+                    sessionId,
+                    meta: {lang: navigator.language}
+                }),
+                timeout: 20000
+            });
+
+            // 2xx 아닌 경우 본문을 읽어 보여주기(검증 실패(400), CORS 오리진 미일치(403/401) 등)
+            if (!res.ok) {
+                const t = await res.text().catch(() => '');
+                addError(`요청 실패: ${res.status} ${res.statusText}\n${t}`);
+                return;
+            }
+
+            const data = await res.json();
+            saveSession(data.sessionId);
+            const latency = typeof data.latencyMs === 'number'
+                ? `${data.latencyMs} ms`
+                : `${Math.round(performance.now() - sendingAt)} ms`;
+            const tokens = data.usage
+                ? `tokens p:${data.usage.promptTokens ?? '-'} c:${data.usage.completionTokens ?? '-'}`
+                : '';
+            addBubble('assistant', data.answer || '(응답 없음)', `${latency}${tokens ? ` • ${tokens}` : ''}`);
+
+        } catch (err) {
+            if (err?.name === 'AbortError') {
+                addError('요청이 타임아웃되었습니다. (네트워크 지연/서버 과부하)');
+            } else {
+                addError(`요청 중 오류가 발생했습니다: ${err}`);
+            }
+        } finally {
+            sendBtn.disabled = false;
+            input.focus();
+        }
+    });
+
+    // 처음 들어왔을 때 현재 설정 상태 안내
+    addBubble('assistant',
+        '안녕하세요! 메시지를 입력해 대화를 시작하세요.\n' +
+        '- API Base: 상단 입력칸에서 변경 가능 (예: http://localhost:9000)\n' +
+        '- 세션은 localStorage로 유지됩니다.'
+    );
 </script>
 </body>
 </html>
