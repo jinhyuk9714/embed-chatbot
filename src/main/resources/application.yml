@@ -10,5 +10,5 @@ app:
     timeout-ms: 15000
 logging:
   level:
-    com.example.embedchatbot: INFO     # 우리 코드 전반을 DEBUG로
+    com.example.embedchatbot: DEBUG     # 우리 코드 전반을 DEBUG로
     org.springframework.web: INFO       # 스프링 웹 로그는 너무 시끄럽지 않게

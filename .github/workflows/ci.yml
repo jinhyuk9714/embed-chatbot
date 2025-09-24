@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+# 같은 브랜치에서 새 커밋이 오면 이전 작업을 취소해 CI 대기열 억제
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+
+    # 이 Job이 GitHub 리포 콘텐츠만 읽으면 되므로 최소 권한
+    permissions:
+      contents: read
+
+    # 전역 환경변수 (모델은 고정, 키는 step 단에서 secrets 주입)
+    env:
+      OPENAI_MODEL: gpt-4o-mini
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven  # Maven 의존성 캐시 활성화 (빠른 빌드)
+
+      # (선택) mvnw 실행 권한 보장 - 일반적으로 필요 없지만 권한 오류시 추가
+      - name: Ensure mvnw is executable
+        run: chmod +x ./mvnw
+
+      # 빌드 + 테스트
+      # - 기본 단위 테스트는 OpenAI를 직접 호출하지 않도록(모킹) 구성하는 게 좋습니다.
+      # - 통합 테스트에서 실제 호출이 필요하면 env로 secrets를 주입하세요.
+      - name: Build & Test (Maven)
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # 필요한 경우에만 아래 두 줄 주석 해제
+          # OPENAI_ORG: ${{ secrets.OPENAI_ORG }}
+          # OPENAI_PROJECT: ${{ secrets.OPENAI_PROJECT }}
+        run: |
+          ./mvnw -B -q -DskipTests=false clean verify
+
+      # (선택) 생성된 JAR를 아티팩트로 남기고 싶다면 주석 해제
+      # - name: Upload JAR artifact
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: embed-chatbot-jar
+      #     path: target/*-SNAPSHOT.jar
