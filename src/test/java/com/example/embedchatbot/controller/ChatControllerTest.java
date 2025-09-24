@@ -1,32 +1,31 @@
-package com.example.embedchatbot.chat;
+package com.example.embedchatbot.controller;
 
+import com.example.embedchatbot.dto.ChatRequest;
+import com.example.embedchatbot.dto.ChatResult;
+import com.example.embedchatbot.dto.ChatUsage;
+import com.example.embedchatbot.service.ChatService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean; // ✅ 이거!
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@WebMvcTest(ChatController.class)
+@WebMvcTest(controllers = ChatController.class)
 class ChatControllerTest {
 
-    @Autowired
-    private MockMvc mockMvc;
+    @Autowired MockMvc mockMvc;
+    @Autowired ObjectMapper objectMapper;
 
-    @Autowired
-    private ObjectMapper objectMapper;
-
-    @MockBean
-    private ChatService chatService;
+    @MockitoBean ChatService chatService; // ✅ 이거!
 
     @DisplayName("POST /v1/chat returns chat response")
     @Test
@@ -53,7 +52,7 @@ class ChatControllerTest {
     @DisplayName("POST /v1/chat validates required fields")
     @Test
     void chat_missingRequiredFields() throws Exception {
-        ChatRequest request = new ChatRequest();
+        ChatRequest request = new ChatRequest(); // botId 누락
         request.setMessage("hello");
 
         mockMvc.perform(post("/v1/chat")

@@ -1,5 +1,9 @@
-package com.example.embedchatbot.chat;
+package com.example.embedchatbot.controller;
 
+import com.example.embedchatbot.dto.ChatRequest;
+import com.example.embedchatbot.dto.ChatResponse;
+import com.example.embedchatbot.dto.ChatResult;
+import com.example.embedchatbot.service.ChatService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;

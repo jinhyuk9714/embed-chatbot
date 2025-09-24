@@ -1,5 +1,8 @@
-package com.example.embedchatbot.chat;
+package com.example.embedchatbot.service;
 
+import com.example.embedchatbot.dto.ChatRequest;
+import com.example.embedchatbot.dto.ChatResult;
+import com.example.embedchatbot.dto.ChatUsage;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 

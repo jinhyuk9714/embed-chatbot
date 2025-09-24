@@ -1,4 +1,4 @@
-package com.example.embedchatbot.chat;
+package com.example.embedchatbot.dto;
 
 import jakarta.validation.constraints.NotBlank;
 
