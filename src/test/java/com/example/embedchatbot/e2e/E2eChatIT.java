@@ -10,7 +10,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Tag("e2e") // -P e2e에서만 실행
-class E2eChatTest {
+class E2eChatIT {
 
     @Test
     void chat_should_return_llm_answer_not_echo() {

@@ -1,12 +1,17 @@
 name: E2E
 
 on:
-  workflow_dispatch:   # 수동 트리거
+  workflow_dispatch: {}   # 수동 트리거 (원하면 schedule 추가 가능)
 
 jobs:
   e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # OPENAI 키가 없으면 건너뜀
     if: ${{ secrets.OPENAI_API_KEY != '' }}
+
+    permissions:
+      contents: read
 
     steps:
       - uses: actions/checkout@v4
@@ -14,33 +19,62 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: '17'
           cache: maven
 
-      # 백엔드 앱을 테스트 중에 직접 기동 (9000 포트)
-      - name: Build app
+      # 유틸(health 체크용) 설치
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl netcat-openbsd
+
+      # 빌드(테스트는 생략: 앱 실행을 빨리 하기 위함)
+      - name: Build app (no tests)
         run: ./mvnw -B -q -DskipTests clean package
 
+      # 백그라운드로 기동 + health 체크
       - name: Run app in background
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: gpt-4o-mini
         run: |
           nohup java -jar target/*-SNAPSHOT.jar > app.log 2>&1 &
-          # 포트 대기
-          for i in {1..30}; do
-            nc -z 127.0.0.1 9000 && break
+          echo $! > app.pid
+
+          echo "Waiting for app on :9000 ..."
+          for i in {1..60}; do
+            if curl -fsS http://127.0.0.1:9000/health > /dev/null; then
+              echo "App is up!"
+              break
+            fi
             sleep 1
           done
 
+          # 마지막 체크
+          curl -fsS http://127.0.0.1:9000/health || (echo "App failed to start"; tail -n 200 app.log; exit 1)
+
+      # E2E 실행: pom의 e2e 프로필(@Tag("e2e"))만 수행 + IT 스킵 비활성화
       - name: Run E2E tests (-P e2e)
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: gpt-4o-mini
-        run: ./mvnw -B -q -P e2e verify
+        run: ./mvnw -B -q -P e2e -DskipITs=false verify
 
-      - name: Show app logs on failure
+      # 실패 시 로그/리포트 아티팩트 업로드 (원하면 항상 업로드로 바꿔도 됨)
+      - name: Upload logs & reports on failure
         if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts
+          path: |
+            app.log
+            target/surefire-reports/*
+            target/failsafe-reports/*
+
+      # 항상 앱 종료
+      - name: Stop app
+        if: always()
         run: |
-          echo "==== app.log ===="
-          tail -n 200 app.log || true
+          if [ -f app.pid ]; then
+            kill $(cat app.pid) || true
+          fi
