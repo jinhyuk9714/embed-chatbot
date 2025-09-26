@@ -1,0 +1,63 @@
+openapi: 3.0.3
+info: { title: Embed Chatbot API, version: 0.2.0 }
+servers: [ { url: http://localhost:9000 } ]
+paths:
+  /v1/chat:
+    post:
+      summary: Send a user message (single response)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ botId, message, sessionId ]
+              properties:
+                botId: { type: string }
+                message: { type: string }
+                sessionId: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  botId: { type: string }
+                  sessionId: { type: string }
+                  reply: { type: string }
+                  latencyMs: { type: integer, format: int64 }
+  /v1/chat/stream:
+    get:
+      summary: Stream tokens via Server-Sent Events
+      parameters:
+        - in: query
+          name: botId
+          required: true
+          schema: { type: string, maxLength: 64 }
+        - in: query
+          name: message
+          required: true
+          schema: { type: string, maxLength: 4000 }
+        - in: query
+          name: sessionId
+          required: false
+          schema: { type: string, maxLength: 128 }
+      responses:
+        '200':
+          description: Stream of events (token, usage, done)
+          content:
+            text/event-stream:
+              examples:
+                sample:
+                  summary: SSE stream
+                  value: |
+                    event: token
+                    data: H
+                    event: token
+                    data: i
+                    event: usage
+                    data: {"promptTokens":5,"completionTokens":10}
+                    event: done
+                    data: [DONE]
