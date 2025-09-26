@@ -17,6 +17,15 @@ app:
     base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
     api-key: ${OPENAI_API_KEY:}
     timeout-ms: 15000
+  ratelimit:
+    ip:
+      capacity: ${RL_IP_CAPACITY:60}          # 분당 60회
+      refillTokens: ${RL_IP_REFILL:60}
+      refillPeriodSec: ${RL_IP_PERIOD:60}
+    session:
+      capacity: ${RL_SESS_CAPACITY:12}        # 10초당 12회
+      refillTokens: ${RL_SESS_REFILL:12}
+      refillPeriodSec: ${RL_SESS_PERIOD:10}
 
 logging:
   level:

@@ -1,0 +1,29 @@
+openapi: 3.0.3
+info: { title: Embed Chatbot API, version: "0.1.0" }
+paths:
+  /v1/chat/stream:
+    get:
+      summary: Stream chat completion
+      parameters:
+        - in:
+            query; name:
+              botId; required:
+                true; schema: { type: string, maxLength: 64 }
+        - in:
+            query; name:
+              message; required:
+                true; schema: { type: string, maxLength: 4000 }
+        - in:
+            query; name:
+              sessionId; required:
+                false; schema: { type: string, maxLength: 128 }
+      responses:
+        '200': { description: Server-Sent Events (token/usage/done) }
+      security:
+        - ApiKeyAuth: [ ]
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key

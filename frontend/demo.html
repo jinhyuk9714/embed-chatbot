@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <title>Widget Demo</title>
+</head>
+<body style="font-family:system-ui">
+<h1>임베드 위젯 데모</h1>
+<p>오른쪽 아래 <b>챗봇</b> 버튼을 눌러보세요.</p>
+
+<!-- /frontend에서 서빙하므로 상대경로로 public/ 접근 -->
+<script src="public/embed-chatbot.min.js"
+        data-api="http://localhost:9000"
+        data-bot="sample-bot"
+        defer></script>
+</body>
+</html>

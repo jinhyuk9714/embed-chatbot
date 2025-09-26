@@ -1,90 +1,190 @@
 <!doctype html>
 <html lang="ko">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Embed Chatbot — Streaming Only</title>
-  <style>
-    body{font-family:system-ui;margin:0;background:#f6f7f9}
-    .wrap{max-width:720px;margin:32px auto;padding:0 16px}
-    .card{background:#fff;border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,.06);overflow:hidden}
-    .head{padding:16px;font-weight:700;border-bottom:1px solid #eee}
-    .msgs{height:420px;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
-    .msg{padding:10px 12px;border-radius:14px;max-width:80%}
-    .me{align-self:flex-end;background:#e9f2ff;white-space:pre-wrap}
-    .bot{align-self:flex-start;background:#f1f3f5;white-space:pre-wrap}
-    .foot{display:grid;grid-template-columns:1fr auto;gap:8px;padding:12px;border-top:1px solid #eee}
-    button{border:0;border-radius:10px;padding:10px 14px;cursor:pointer}
-    .error{color:#b00020;font-size:12px;padding:0 12px 12px}
-  </style>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <title>Embed Chatbot — Streaming Only</title>
+    <style>
+        body {
+            font-family: system-ui;
+            margin: 0;
+            background: #f6f7f9
+        }
+
+        .wrap {
+            max-width: 720px;
+            margin: 32px auto;
+            padding: 0 16px
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 14px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, .06);
+            overflow: hidden
+        }
+
+        .head {
+            padding: 16px;
+            font-weight: 700;
+            border-bottom: 1px solid #eee
+        }
+
+        .msgs {
+            height: 420px;
+            overflow: auto;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px
+        }
+
+        .msg {
+            padding: 10px 12px;
+            border-radius: 14px;
+            max-width: 80%
+        }
+
+        .me {
+            align-self: flex-end;
+            background: #e9f2ff;
+            white-space: pre-wrap
+        }
+
+        .bot {
+            align-self: flex-start;
+            background: #f1f3f5;
+            white-space: pre-wrap
+        }
+
+        .foot {
+            display: grid;
+            grid-template-columns:1fr auto;
+            gap: 8px;
+            padding: 12px;
+            border-top: 1px solid #eee
+        }
+
+        button {
+            border: 0;
+            border-radius: 10px;
+            padding: 10px 14px;
+            cursor: pointer
+        }
+
+        .error {
+            color: #b00020;
+            font-size: 12px;
+            padding: 0 12px 12px
+        }
+    </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="card" role="region" aria-label="Chatbot">
-    <div class="head">Embed Chatbot — Streaming Only</div>
-    <div id="msgs" class="msgs" aria-live="polite"></div>
-    <div class="error" id="err" aria-live="assertive"></div>
-    <div class="foot">
-      <input id="input" placeholder="메시지를 입력하세요" aria-label="message"/>
-      <button id="send">전송</button>
+    <div class="card" role="region" aria-label="Chatbot">
+        <div class="head">Embed Chatbot — Streaming Only</div>
+        <div id="msgs" class="msgs" aria-live="polite"></div>
+        <div class="error" id="err" aria-live="assertive"></div>
+        <div class="foot">
+            <input id="input" placeholder="메시지를 입력하세요" aria-label="message"/>
+            <button id="send">전송</button>
+        </div>
     </div>
-  </div>
 </div>
+<!-- ✱ frontend/chat.html (하단 <script> 부분만 교체/추가) -->
 <script>
-  const API = (window.CHAT_API_BASE || "http://localhost:9000");
-  const BOT = (window.CHAT_BOT_ID || "sample-bot");
-  const SID = (() => { const k="chat_session_id"; const v=localStorage.getItem(k)||String(Date.now()); localStorage.setItem(k,v); return v; })();
+    const API = (window.CHAT_API_BASE || "http://localhost:9000");
+    const BOT = (window.CHAT_BOT_ID || "sample-bot");
+    const SID = (() => {
+        const k = "chat_session_id";
+        const v = localStorage.getItem(k) || String(Date.now());
+        localStorage.setItem(k, v);
+        return v;
+    })();
 
-  const $msgs=document.getElementById('msgs');
-  const $err=document.getElementById('err');
-  const $in=document.getElementById('input');
-  const $btn=document.getElementById('send');
+    const $msgs = document.getElementById('msgs');
+    const $err = document.getElementById('err');
+    const $in = document.getElementById('input');
+    const $btn = document.getElementById('send');
 
-  function push(role, text) {
-    const div = document.createElement('div');
-    div.className = 'msg ' + (role === 'user' ? 'me' : 'bot');
-    div.textContent = text;
-    $msgs.appendChild(div);
-    $msgs.scrollTop = $msgs.scrollHeight;
-    return div;
-  }
+    let composing = false;   // IME 조합 중 여부
+    let sending = false;     // 전송 중 중복 방지
 
-  function sendStream() {
-    $err.textContent = '';
-    const text = ($in.value||'').trim(); if(!text) return;
-    push('user', text);
-    $in.value='';
-    const botMsg = push('assistant', '');
-
-    const url = API + '/v1/chat/stream'
-      + '?botId=' + encodeURIComponent(BOT)
-      + '&sessionId=' + encodeURIComponent(SID)
-      + '&message=' + encodeURIComponent(text);
-
-    const es = new EventSource(url);
-    es.addEventListener('token', (ev) => {
-      try {
-        const { t } = JSON.parse(ev.data);
-        botMsg.textContent += (t ?? "");
-      } catch { botMsg.textContent += ev.data; } // 구 형식 호환
-      $msgs.scrollTop = $msgs.scrollHeight;
+    $in.addEventListener('compositionstart', () => {
+        composing = true;
     });
-    es.addEventListener('usage', () => {});
-    es.addEventListener('done', () => { es.close(); });
-    es.onerror = async () => {
-      es.close();
-      try {
-        const r = await fetch(url, { headers: { 'Accept': 'text/event-stream' } });
-        const txt = await r.text();
-        $err.textContent = `스트림 오류: HTTP ${r.status} ${r.statusText} — ${txt.slice(0,200)}`;
-      } catch (e) {
-        $err.textContent = '스트림 오류: ' + (e.message||e);
-      }
-    };
-  }
+    $in.addEventListener('compositionend', () => {
+        composing = false;
+    });
 
-  $btn.addEventListener('click', sendStream);
-  $in.addEventListener('keydown', (e) => { if(e.key==='Enter' && !e.shiftKey) sendStream(); });
+    function push(role, text) {
+        const div = document.createElement('div');
+        div.className = 'msg ' + (role === 'user' ? 'me' : 'bot');
+        div.textContent = text;
+        $msgs.appendChild(div);
+        $msgs.scrollTop = $msgs.scrollHeight;
+        return div;
+    }
+
+    function sendStream() {
+        if (sending) return; // 중복 방지
+        $err.textContent = '';
+        const text = ($in.value || '').trim();
+        if (!text) return;
+        sending = true;
+        $btn.disabled = true;
+
+        push('user', text);
+        $in.value = '';
+        const botMsg = push('assistant', '');
+
+        const url = API + '/v1/chat/stream'
+            + '?botId=' + encodeURIComponent(BOT)
+            + '&sessionId=' + encodeURIComponent(SID)
+            + '&message=' + encodeURIComponent(text);
+
+        const es = new EventSource(url);
+        es.addEventListener('token', (ev) => {
+            try {
+                const {t} = JSON.parse(ev.data);
+                botMsg.textContent += (t ?? "");
+            } catch {
+                botMsg.textContent += ev.data;
+            }
+            $msgs.scrollTop = $msgs.scrollHeight;
+        });
+        es.addEventListener('usage', () => {
+        });
+        es.addEventListener('done', () => {
+            es.close();
+            sending = false;
+            $btn.disabled = false;
+        });
+        es.onerror = async () => {
+            es.close();
+            sending = false;
+            $btn.disabled = false;
+            try {
+                const r = await fetch(url, {headers: {'Accept': 'text/event-stream'}});
+                const txt = await r.text();
+                $err.textContent = `스트림 오류: HTTP ${r.status} ${r.statusText} — ${txt.slice(0, 200)}`;
+            } catch (e) {
+                $err.textContent = '스트림 오류: ' + (e.message || e);
+            }
+        };
+    }
+
+    $btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        sendStream();
+    });
+    $in.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey && !composing && !e.isComposing) {
+            e.preventDefault();   // 기본 제출/클릭 방지
+            sendStream();
+        }
+    });
 </script>
+
 </body>
 </html>

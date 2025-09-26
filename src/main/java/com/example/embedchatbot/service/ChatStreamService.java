@@ -1,141 +1,98 @@
 package com.example.embedchatbot.service;
 
-import com.example.embedchatbot.dto.ChatRequest;
 import com.example.embedchatbot.dto.ChatResult;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Semaphore;
 
 @Service
 public class ChatStreamService {
 
     public interface Sink {
-        void onTokenJson(String jsonToken);   // {"t":"…"}
-        void onUsageJson(String jsonUsage);   // {"promptTokens":..,"completionTokens":..}
+        void onTokenJson(String jsonToken);
+        void onUsageJson(String jsonUsage);
         void onDone();
         void onError(String message);
-        void onHeartbeat();                   // SSE keep-alive (":\n")
+        void onHeartbeat();
     }
 
-    private final ChatService chatService;
-    private final long delayMs;
-    private final long heartbeatMs;
+    private final ChatOrchestrator orchestrator;                 // ⬅️ 변경
+    private final Executor sseExecutor;
+    private final long delayMs, heartbeatMs, targetTotalMs;
+    private final ObjectMapper mapper = new ObjectMapper();
+    private final Semaphore permits = new Semaphore(Integer.parseInt(System.getProperty("SSE_PERMITS", "12")));
 
     public ChatStreamService(
-            ChatService chatService,
+            ChatOrchestrator orchestrator,
+            @Qualifier("sseExecutor") Executor sseExecutor,
             @Value("${app.stream.delay-ms:8}") long delayMs,
-            @Value("${app.stream.heartbeat-ms:15000}") long heartbeatMs
+            @Value("${app.stream.heartbeat-ms:15000}") long heartbeatMs,
+            @Value("${app.stream.target-total-ms:2500}") long targetTotalMs
     ) {
-        this.chatService = chatService;
+        this.orchestrator = orchestrator;
+        this.sseExecutor = sseExecutor;
         this.delayMs = Math.max(0, delayMs);
         this.heartbeatMs = Math.max(1000, heartbeatMs);
+        this.targetTotalMs = Math.max(0, targetTotalMs);
     }
 
     public void stream(String botId, String message, String sessionId, Sink sink) {
-        CompletableFuture.runAsync(() -> {
-            try {
-                final ChatRequest req = buildRequest(botId, message, sessionId);
-                final ChatResult result = chatService.chat(req);
+        final String traceId = UUID.randomUUID().toString();
+        final long t0 = System.nanoTime();
 
-                String reply = extractAnswer(result);
-                if (reply == null) reply = "";
+        CompletableFuture.runAsync(() -> {
+            if (!permits.tryAcquire()) { sink.onError("busy"); return; }
+            try {
+                ChatResult result = orchestrator.chatWithContext(botId, sessionId, message);
+
+                String reply = (result == null || result.answer() == null) ? "" : result.answer();
                 reply = reply.replace("\r\n", "\n");
 
+                int len = reply.codePointCount(0, reply.length());
+                long effDelay = this.delayMs;
+                if (len > 0 && targetTotalMs > 0) {
+                    long perChar = targetTotalMs / Math.max(1, len);
+                    effDelay = Math.min(this.delayMs, perChar);
+                }
+
                 long lastBeat = System.currentTimeMillis();
+                long chars = 0L;
+
                 for (int i = 0; i < reply.length(); ) {
                     int cp = reply.codePointAt(i);
                     String ch = new String(Character.toChars(cp));
-                    sink.onTokenJson("{\"t\":\"" + jsonEsc(ch) + "\"}");
+                    sink.onTokenJson(mapper.createObjectNode().put("t", ch).toString());
                     i += Character.charCount(cp);
-
-                    if (delayMs > 0) Thread.sleep(delayMs);
+                    chars++;
+                    if (effDelay > 0) try { Thread.sleep(effDelay); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); sink.onError("interrupted"); return; }
                     long now = System.currentTimeMillis();
-                    if (now - lastBeat >= heartbeatMs) {
-                        sink.onHeartbeat();  // ":\n"
-                        lastBeat = now;
-                    }
+                    if (now - lastBeat >= heartbeatMs) { sink.onHeartbeat(); lastBeat = now; }
                 }
 
-                Object usage = extractUsage(result);
-                if (usage != null) {
-                    long pt = safeTokens(usage, true);
-                    long ct = safeTokens(usage, false);
-                    sink.onUsageJson("{\"promptTokens\":" + Math.max(0, pt) + ",\"completionTokens\":" + Math.max(0, ct) + "}");
-                }
+                long latencyMs = Math.max(0L, (System.nanoTime() - t0) / 1_000_000L);
+                long pt = 0, ct = 0;
+                if (result != null && result.usage() != null) { pt = result.usage().promptTokens(); ct = result.usage().completionTokens(); }
+
+                ObjectNode u = mapper.createObjectNode()
+                        .put("promptTokens", Math.max(0, pt))
+                        .put("completionTokens", Math.max(0, ct))
+                        .put("latencyMs", latencyMs)
+                        .put("traceId", traceId)
+                        .put("chars", chars);
+                sink.onUsageJson(u.toString());
                 sink.onDone();
-            } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-                sink.onError("interrupted");
             } catch (Throwable t) {
                 sink.onError(t.getMessage() == null ? "error" : t.getMessage());
+            } finally {
+                permits.release();
             }
-        });
-    }
-
-    // ---- helpers (record/POJO 호환; 리플렉션) ----
-    private static ChatRequest buildRequest(String botId, String message, String sessionId) {
-        try {
-            return ChatRequest.class
-                    .getDeclaredConstructor(String.class, String.class, String.class)
-                    .newInstance(botId, message, sessionId);
-        } catch (NoSuchMethodException e) {
-            try {
-                ChatRequest req = ChatRequest.class.getDeclaredConstructor().newInstance();
-                ChatRequest.class.getMethod("setBotId", String.class).invoke(req, botId);
-                ChatRequest.class.getMethod("setMessage", String.class).invoke(req, message);
-                ChatRequest.class.getMethod("setSessionId", String.class).invoke(req, sessionId);
-                return req;
-            } catch (Exception ex) {
-                throw new IllegalStateException("Cannot construct ChatRequest", ex);
-            }
-        } catch (Exception e) {
-            throw new IllegalStateException("Cannot construct ChatRequest", e);
-        }
-    }
-
-    private static String extractAnswer(ChatResult r) {
-        if (r == null) return "";
-        try { return (String) r.getClass().getMethod("answer").invoke(r); }
-        catch (NoSuchMethodException ignore) {
-            try { return (String) r.getClass().getMethod("getAnswer").invoke(r); }
-            catch (Exception e) { return ""; }
-        } catch (Exception e) { return ""; }
-    }
-    private static Object extractUsage(ChatResult r) {
-        if (r == null) return null;
-        try { return r.getClass().getMethod("usage").invoke(r); }
-        catch (NoSuchMethodException ignore) {
-            try { return r.getClass().getMethod("getUsage").invoke(r); }
-            catch (Exception e) { return null; }
-        } catch (Exception e) { return null; }
-    }
-    private static long safeTokens(Object usage, boolean prompt) {
-        try {
-            if (prompt) {
-                try { return ((Number) usage.getClass().getMethod("promptTokens").invoke(usage)).longValue(); }
-                catch (NoSuchMethodException ignore) { return ((Number) usage.getClass().getMethod("getPromptTokens").invoke(usage)).longValue(); }
-            } else {
-                try { return ((Number) usage.getClass().getMethod("completionTokens").invoke(usage)).longValue(); }
-                catch (NoSuchMethodException ignore) { return ((Number) usage.getClass().getMethod("getCompletionTokens").invoke(usage)).longValue(); }
-            }
-        } catch (Exception e) { return 0L; }
-    }
-
-    private static String jsonEsc(String s) {
-        if (s == null) return "";
-        StringBuilder b = new StringBuilder(s.length() + 8);
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            switch (c) {
-                case '\\' -> b.append("\\\\");
-                case '\"' -> b.append("\\\"");
-                case '\n' -> b.append("\\n");
-                case '\r' -> b.append("\\r");
-                case '\t' -> b.append("\\t");
-                default -> b.append(c);
-            }
-        }
-        return b.toString();
+        }, sseExecutor);
     }
 }
