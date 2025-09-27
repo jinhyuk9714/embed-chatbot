@@ -41,7 +41,9 @@ public class RetrievalService {
     }
 
     public List<Snippet> retrieve(String query, String locale, Integer k) {
-        if (!props.isEnabled()) return List.of();
+        if (!props.isEnabled() || query == null || query.isBlank()) {
+            return List.of();
+        }
         int topK = (k != null && k > 0) ? k : props.getTopK();
         return index.retrieve(query, locale, topK);
     }

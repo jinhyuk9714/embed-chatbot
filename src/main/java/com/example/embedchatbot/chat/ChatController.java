@@ -1,35 +1,32 @@
-package com.example.embedchatbot.controller;
+package com.example.embedchatbot.chat;
 
-import com.example.embedchatbot.dto.ChatUsage;
-import com.example.embedchatbot.service.ChatStreamService;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @RestController
 @RequestMapping("/v1")
 @Validated
-public class ChatStreamController {
+public class ChatController {
 
     private final ChatStreamService streamService;
 
-    public ChatStreamController(ChatStreamService streamService) {
+    public ChatController(ChatStreamService streamService) {
         this.streamService = streamService;
     }
 
     @GetMapping("/chat/stream")
     public SseEmitter stream(
-            @RequestParam @NotBlank @Size(max = 64) String botId,
             @RequestParam @NotBlank @Size(max = 4000) String message,
             @RequestParam(required = false) @Size(max = 128) String sessionId
     ) {
-        // 0L(무한) 대신 60초 기본 타임아웃; 프론트는 자동 재연결 권장
-        SseEmitter emitter = new SseEmitter(60_000L); // +++
-
-        streamService.scheduleHeartbeat(emitter);
-
+        SseEmitter emitter = new SseEmitter(60_000L);
+        streamService.startHeartbeat(emitter);
         streamService.stream(message, sessionId, new ChatStreamService.StreamListener() {
             @Override
             public void onToken(String tokenChunk) {
@@ -53,7 +50,7 @@ public class ChatStreamController {
                     emitter.send(SseEmitter.event().name("done").data("ok"));
                 } catch (Exception ignored) {
                 } finally {
-                    emitter.complete(); // +++
+                    emitter.complete();
                 }
             }
 
@@ -65,15 +62,7 @@ public class ChatStreamController {
                 }
             }
 
-            @Override
-            public void onHeartbeat() {
-                try {
-                    emitter.send(SseEmitter.event().name("keepalive").data(""));
-                } catch (Exception ignored) {
-                }
-            }
         });
-
         return emitter;
     }
 }
