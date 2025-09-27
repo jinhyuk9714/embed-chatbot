@@ -1,190 +1,104 @@
+<!-- File: frontend/chat.html -->
 <!doctype html>
 <html lang="ko">
 <head>
-    <meta charset="utf-8"/>
-    <meta name="viewport" content="width=device-width,initial-scale=1"/>
-    <title>Embed Chatbot — Streaming Only</title>
+    <meta charset="utf-8" />
+    <title>Embed Chatbot – SSE Test UI</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
     <style>
-        body {
-            font-family: system-ui;
-            margin: 0;
-            background: #f6f7f9
-        }
-
-        .wrap {
-            max-width: 720px;
-            margin: 32px auto;
-            padding: 0 16px
-        }
-
-        .card {
-            background: #fff;
-            border-radius: 14px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, .06);
-            overflow: hidden
-        }
-
-        .head {
-            padding: 16px;
-            font-weight: 700;
-            border-bottom: 1px solid #eee
-        }
-
-        .msgs {
-            height: 420px;
-            overflow: auto;
-            padding: 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px
-        }
-
-        .msg {
-            padding: 10px 12px;
-            border-radius: 14px;
-            max-width: 80%
-        }
-
-        .me {
-            align-self: flex-end;
-            background: #e9f2ff;
-            white-space: pre-wrap
-        }
-
-        .bot {
-            align-self: flex-start;
-            background: #f1f3f5;
-            white-space: pre-wrap
-        }
-
-        .foot {
-            display: grid;
-            grid-template-columns:1fr auto;
-            gap: 8px;
-            padding: 12px;
-            border-top: 1px solid #eee
-        }
-
-        button {
-            border: 0;
-            border-radius: 10px;
-            padding: 10px 14px;
-            cursor: pointer
-        }
-
-        .error {
-            color: #b00020;
-            font-size: 12px;
-            padding: 0 12px 12px
-        }
+        body{font:14px/1.5 ui-sans-serif,system-ui,Segoe UI,Roboto,Apple SD Gothic Neo,AppleGothic;}
+        .wrap{max-width:720px;margin:40px auto;padding:16px;}
+        .row{display:flex;gap:8px;align-items:center;margin-bottom:10px;}
+        #chat{white-space:pre-wrap;border:1px solid #ddd;border-radius:8px;min-height:160px;padding:12px;overflow:auto;}
+        input,button{padding:8px 10px}
+        .tag{border:1px solid #ccc;border-radius:999px;padding:2px 8px}
     </style>
 </head>
 <body>
 <div class="wrap">
-    <div class="card" role="region" aria-label="Chatbot">
-        <div class="head">Embed Chatbot — Streaming Only</div>
-        <div id="msgs" class="msgs" aria-live="polite"></div>
-        <div class="error" id="err" aria-live="assertive"></div>
-        <div class="foot">
-            <input id="input" placeholder="메시지를 입력하세요" aria-label="message"/>
-            <button id="send">전송</button>
-        </div>
+    <h1>Embed Chatbot – Demo</h1>
+
+    <div class="row">
+        <label>API</label>
+        <input id="api" size="36" value="http://localhost:9000" />
+        <span class="tag" id="status">idle</span>
+        <span class="tag" id="usage">latency – · tokens –</span>
     </div>
+
+    <div class="row">
+        <input id="msg" size="50" placeholder="메시지를 입력하세요…" value="hello sse" />
+        <button id="send">보내기</button>
+    </div>
+
+    <div id="chat"></div>
 </div>
-<!-- ✱ frontend/chat.html (하단 <script> 부분만 교체/추가) -->
+
 <script>
-    const API = (window.CHAT_API_BASE || "http://localhost:9000");
-    const BOT = (window.CHAT_BOT_ID || "sample-bot");
-    const SID = (() => {
-        const k = "chat_session_id";
-        const v = localStorage.getItem(k) || String(Date.now());
-        localStorage.setItem(k, v);
-        return v;
-    })();
+    (() => {
+        const API_INPUT = document.getElementById('api');
+        const STATUS = document.getElementById('status');
+        const USAGE = document.getElementById('usage');
+        const CHAT  = document.getElementById('chat');
+        const MSG   = document.getElementById('msg');
+        const SEND  = document.getElementById('send');
 
-    const $msgs = document.getElementById('msgs');
-    const $err = document.getElementById('err');
-    const $in = document.getElementById('input');
-    const $btn = document.getElementById('send');
+        const BOT = 'sample-bot';
+        let es, tries = 0, lastBeat = Date.now(), beatTimer, sending = false;
 
-    let composing = false;   // IME 조합 중 여부
-    let sending = false;     // 전송 중 중복 방지
+        function setStatus(s){ STATUS.textContent = s; }
+        function setUsage(u){ USAGE.textContent = `latency ${u.latencyMs}ms · tokens ${u.completionTokens}`; }
+        function append(t){ CHAT.textContent += t; CHAT.scrollTop = CHAT.scrollHeight; }
 
-    $in.addEventListener('compositionstart', () => {
-        composing = true;
-    });
-    $in.addEventListener('compositionend', () => {
-        composing = false;
-    });
-
-    function push(role, text) {
-        const div = document.createElement('div');
-        div.className = 'msg ' + (role === 'user' ? 'me' : 'bot');
-        div.textContent = text;
-        $msgs.appendChild(div);
-        $msgs.scrollTop = $msgs.scrollHeight;
-        return div;
-    }
-
-    function sendStream() {
-        if (sending) return; // 중복 방지
-        $err.textContent = '';
-        const text = ($in.value || '').trim();
-        if (!text) return;
-        sending = true;
-        $btn.disabled = true;
-
-        push('user', text);
-        $in.value = '';
-        const botMsg = push('assistant', '');
-
-        const url = API + '/v1/chat/stream'
-            + '?botId=' + encodeURIComponent(BOT)
-            + '&sessionId=' + encodeURIComponent(SID)
-            + '&message=' + encodeURIComponent(text);
-
-        const es = new EventSource(url);
-        es.addEventListener('token', (ev) => {
-            try {
-                const {t} = JSON.parse(ev.data);
-                botMsg.textContent += (t ?? "");
-            } catch {
-                botMsg.textContent += ev.data;
-            }
-            $msgs.scrollTop = $msgs.scrollHeight;
-        });
-        es.addEventListener('usage', () => {
-        });
-        es.addEventListener('done', () => {
-            es.close();
-            sending = false;
-            $btn.disabled = false;
-        });
-        es.onerror = async () => {
-            es.close();
-            sending = false;
-            $btn.disabled = false;
-            try {
-                const r = await fetch(url, {headers: {'Accept': 'text/event-stream'}});
-                const txt = await r.text();
-                $err.textContent = `스트림 오류: HTTP ${r.status} ${r.statusText} — ${txt.slice(0, 200)}`;
-            } catch (e) {
-                $err.textContent = '스트림 오류: ' + (e.message || e);
-            }
-        };
-    }
-
-    $btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        sendStream();
-    });
-    $in.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey && !composing && !e.isComposing) {
-            e.preventDefault();   // 기본 제출/클릭 방지
-            sendStream();
+        function startHeartbeatWatchdog(){
+            stopHeartbeatWatchdog();
+            beatTimer = setInterval(() => {
+                if (Date.now() - lastBeat > 20000) { es?.close?.(); onError(); }
+            }, 5000);
         }
-    });
-</script>
+        function stopHeartbeatWatchdog(){ if (beatTimer) { clearInterval(beatTimer); beatTimer = null; } }
 
+        function onError(){
+            setStatus('error');
+            sending = false;
+            stopHeartbeatWatchdog();
+            retry(MSG.value.trim());
+        }
+
+        function retry(message){
+            tries++;
+            const delay = Math.min(30000, 1000 * Math.pow(2, Math.min(tries, 5)));
+            setStatus(`reconnecting in ${delay/1000}s…`);
+            setTimeout(() => connect(message), delay);
+        }
+
+        function connect(message){
+            const API = API_INPUT.value.trim();
+            const sid = (localStorage.getItem('chat_sid') || crypto.randomUUID());
+            localStorage.setItem('chat_sid', sid);
+            const url = `${API}/v1/chat/stream?botId=${encodeURIComponent(BOT)}&message=${encodeURIComponent(message)}&sessionId=${encodeURIComponent(sid)}`;
+
+            try { es?.close?.(); } catch {}
+            es = new EventSource(url);
+            sending = true; tries = 0; lastBeat = Date.now();
+            setStatus('connecting…'); startHeartbeatWatchdog();
+
+            es.addEventListener('open', () => setStatus('open'));
+            es.addEventListener('token', (e) => { append(e.data); lastBeat = Date.now(); });
+            es.addEventListener('usage', (e) => { try { setUsage(JSON.parse(e.data)); } catch {} lastBeat = Date.now(); });
+            es.addEventListener('keepalive', () => { lastBeat = Date.now(); });
+            es.addEventListener('done', () => { setStatus('done'); sending = false; stopHeartbeatWatchdog(); es.close(); });
+            es.onerror = onError;
+        }
+
+        SEND.addEventListener('click', () => {
+            if (sending) return;
+            const m = MSG.value.trim();
+            if (!m) return;
+            CHAT.textContent = '';
+            setUsage({ latencyMs: '–', completionTokens: '–' });
+            connect(m);
+        });
+    })();
+</script>
 </body>
 </html>

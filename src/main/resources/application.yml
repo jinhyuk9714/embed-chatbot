@@ -5,9 +5,18 @@
 server:
   port: 9000
 
+openai:
+  api-key: ${OPENAI_API_KEY:}       # 환경변수로 주입; 비어있으면 Echo 폴백
+  model: ${OPENAI_MODEL:gpt-4o-mini}
+  base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
+  temperature: 0.2
+  max-tokens: 512
+  connect-timeout-ms: 3000
+  read-timeout-ms: 60000
+
 app:
   cors:
-    allowed-origins: ${ALLOWED_ORIGINS:http://localhost:8000,http://127.0.0.1:8000}
+    allowed-origins: "http://127.0.0.1:8000,http://localhost:8000"
   stream:
     heartbeat-ms: ${STREAM_HEARTBEAT_MS:15000}
     delay-ms: ${STREAM_DELAY_MS:8}

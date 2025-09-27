@@ -1,7 +1,3 @@
-// ============================================================================
-// File: src/main/java/com/example/embedchatbot/dto/ChatRequest.java
-// Why: 입력 길이/형식 검증 강화(과도한 payload 방지)
-// ============================================================================
 package com.example.embedchatbot.dto;
 
 import jakarta.validation.constraints.NotBlank;
@@ -10,15 +6,16 @@ import jakarta.validation.constraints.Size;
 
 import java.util.Map;
 
+/** Why: 입력 검증 (payload 폭주 방지) */
 public class ChatRequest {
 
     @NotBlank
     @Size(max = 64)
-    @Pattern(regexp = "^[a-zA-Z0-9._-]+$", message = "botId must be alphanumeric plus . _ -")
+    @Pattern(regexp = "^[A-Za-z0-9._-]+$")
     private String botId;
 
     @NotBlank
-    @Size(min = 1, max = 4000)
+    @Size(max = 4000)
     private String message;
 
     @Size(max = 128)

@@ -1,0 +1,102 @@
+<!doctype html>
+<meta charset="utf-8"/>
+<title>SSE Test</title>
+<style>
+    body {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        margin: 20px;
+    }
+
+    .row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 8px;
+    }
+
+    #log {
+        white-space: pre-wrap;
+        border: 1px solid #ddd;
+        padding: 12px;
+        border-radius: 8px;
+        height: 320px;
+        overflow: auto;
+    }
+
+    input, button {
+        padding: 8px 10px;
+    }
+
+    .tag {
+        padding: 2px 6px;
+        border-radius: 6px;
+        border: 1px solid #ccc;
+    }
+</style>
+<div class="row">
+    <label>API</label>
+    <input id="api" size="40" value="http://localhost:9000"/>
+    <label>Key</label>
+    <input id="key" size="12" value="dev-key"/>
+</div>
+<div class="row">
+    <label>botId</label>
+    <input id="bot" value="sample-bot"/>
+    <label>message</label>
+    <input id="msg" value="hello from browser" size="40"/>
+    <button id="start">Start</button>
+    <button id="stop">Stop</button>
+</div>
+<div class="row">
+    <span class="tag" id="stat">idle</span>
+    <span class="tag" id="chars">chars: 0</span>
+</div>
+<pre id="log"></pre>
+<script>
+    let es, chars = 0;
+    const log = (x) => {
+        const el = document.getElementById('log');
+        el.textContent += x + "\n";
+        el.scrollTop = el.scrollHeight;
+    };
+    document.getElementById('start').onclick = () => {
+        const api = document.getElementById('api').value;
+        const key = document.getElementById('key').value;
+        const bot = document.getElementById('bot').value;
+        const msg = document.getElementById('msg').value;
+        const url = `${api}/v1/chat/stream?botId=${encodeURIComponent(bot)}&message=${encodeURIComponent(msg)}&sessionId=${crypto.randomUUID()}`;
+        if (es) es.close();
+        es = new EventSource(url, {withCredentials: false});
+        // X-API-Key는 EventSource 옵션으로 못 넣으니 프록시/서버에서 키 없이 허용 중일 때만 사용하세요.
+        // Why: 브라우저 EventSource는 커스텀 헤더 미지원. 필요 시 fetch+ReadableStream 또는 프록시 사용.
+        document.getElementById('stat').textContent = "connecting…";
+        es.addEventListener('open', () => {
+            document.getElementById('stat').textContent = "open";
+        });
+        es.addEventListener('token', (e) => {
+            chars += (e.data || "").length;
+            document.getElementById('chars').textContent = "chars: " + chars;
+            log(`[token] ${e.data}`);
+        });
+        es.addEventListener('usage', (e) => {
+            log(`[usage] ${e.data}`);
+        });
+        es.addEventListener('keepalive', () => {
+            log(`[keepalive]`);
+        });
+        es.addEventListener('done', () => {
+            log(`[done]`);
+            es.close();
+            document.getElementById('stat').textContent = "closed";
+        });
+        es.onerror = (e) => {
+            log(`[error] ${e?.message || 'error'}`);
+            document.getElementById('stat').textContent = "error";
+            es.close();
+        };
+    };
+    document.getElementById('stop').onclick = () => {
+        if (es) es.close();
+        document.getElementById('stat').textContent = "stopped";
+    };
+</script>

@@ -1,4 +1,3 @@
-// File: src/main/java/com/example/embedchatbot/config/RateLimitConfig.java
 package com.example.embedchatbot.config;
 
 import io.github.bucket4j.Bandwidth;
@@ -12,33 +11,24 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/** Why: IP / 세션별 레이트리밋 버킷 팩토리 */
 @Configuration
 public class RateLimitConfig {
+
+    @Value("${rl.ip.capacity:60}") private int ipCapacity;
+    @Value("${rl.ip.refill.tokens:60}") private int ipRefillTokens;
+    @Value("${rl.ip.refill.periodSec:60}") private int ipRefillPeriodSec;
+
+    @Value("${rl.sess.capacity:12}") private int sessCapacity;
+    @Value("${rl.sess.refill.tokens:12}") private int sessRefillTokens;
+    @Value("${rl.sess.refill.periodSec:10}") private int sessRefillPeriodSec;
 
     private final Map<String, Bucket> ipBuckets = new ConcurrentHashMap<>();
     private final Map<String, Bucket> sessBuckets = new ConcurrentHashMap<>();
 
-    private final long ipCapacity, ipRefillTokens, ipRefillPeriodSec;
-    private final long sessCapacity, sessRefillTokens, sessRefillPeriodSec;
-
-    public RateLimitConfig(
-            @Value("${app.ratelimit.ip.capacity:60}") long ipCapacity,
-            @Value("${app.ratelimit.ip.refillTokens:60}") long ipRefillTokens,
-            @Value("${app.ratelimit.ip.refillPeriodSec:60}") long ipRefillPeriodSec,
-            @Value("${app.ratelimit.session.capacity:12}") long sessCapacity,
-            @Value("${app.ratelimit.session.refillTokens:12}") long sessRefillTokens,
-            @Value("${app.ratelimit.session.refillPeriodSec:10}") long sessRefillPeriodSec
-    ) {
-        this.ipCapacity = ipCapacity;
-        this.ipRefillTokens = ipRefillTokens;
-        this.ipRefillPeriodSec = ipRefillPeriodSec;
-        this.sessCapacity = sessCapacity;
-        this.sessRefillTokens = sessRefillTokens;
-        this.sessRefillPeriodSec = sessRefillPeriodSec;
-    }
-
     public Bucket resolveIpBucket(String ip) {
-        return ipBuckets.computeIfAbsent(ip == null ? "unknown" : ip, k ->
+        String key = StringUtils.hasText(ip) ? ip : "unknown";
+        return ipBuckets.computeIfAbsent(key, k ->
                 Bucket.builder()
                         .addLimit(Bandwidth.classic(ipCapacity,
                                 Refill.intervally(ipRefillTokens, Duration.ofSeconds(ipRefillPeriodSec))))

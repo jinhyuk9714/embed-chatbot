@@ -1,27 +1,10 @@
-// ============================================================================
-// File: src/main/java/com/example/embedchatbot/dto/ChatResponse.java
-// Why: 기존 프론트 호환을 위해 answer 외에 reply 키도 직렬화
-// ============================================================================
 package com.example.embedchatbot.dto;
 
+/** Optional: 최종 단건 응답 형태(스트리밍 아닌 일반) */
 public class ChatResponse {
-    private final String answer;
-    private final String sessionId;
-    private final ChatUsage usage;
-    private final long latencyMs;
-
-    public ChatResponse(String answer, String sessionId, ChatUsage usage, long latencyMs) {
-        this.answer = answer;
-        this.sessionId = sessionId;
-        this.usage = usage;
-        this.latencyMs = latencyMs;
-    }
-
-    // 호환: 구 프론트에서 reply만 읽는 경우 지원
-    public String getReply() { return answer; }
-
-    public String getAnswer() { return answer; }
-    public String getSessionId() { return sessionId; }
-    public ChatUsage getUsage() { return usage; }
-    public long getLatencyMs() { return latencyMs; }
+    private ChatResult result;
+    public ChatResponse() {}
+    public ChatResponse(ChatResult result) { this.result = result; }
+    public ChatResult getResult() { return result; }
+    public void setResult(ChatResult result) { this.result = result; }
 }

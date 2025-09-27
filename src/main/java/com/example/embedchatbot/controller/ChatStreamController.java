@@ -1,9 +1,6 @@
-// ============================================================================
-// File: src/main/java/com/example/embedchatbot/controller/ChatStreamController.java
-// Note: UTF-8 명시 + 수명주기 핸들러(변경 없음), 계약: token/usage(latencyMs, traceId)/done
-// ============================================================================
 package com.example.embedchatbot.controller;
 
+import com.example.embedchatbot.dto.ChatUsage;
 import com.example.embedchatbot.service.ChatStreamService;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -22,72 +19,61 @@ public class ChatStreamController {
         this.streamService = streamService;
     }
 
-    @GetMapping(path = "/chat/stream", produces = "text/event-stream;charset=UTF-8")
+    @GetMapping("/chat/stream")
     public SseEmitter stream(
             @RequestParam @NotBlank @Size(max = 64) String botId,
-            @RequestParam @NotBlank @Size(min = 1, max = 4000) String message,
+            @RequestParam @NotBlank @Size(max = 4000) String message,
             @RequestParam(required = false) @Size(max = 128) String sessionId
     ) {
-        final SseEmitter emitter = new SseEmitter(0L);
-        emitter.onTimeout(() -> {
-            try {
-                emitter.send(SseEmitter.event().name("error").data("{\"error\":\"timeout\"}"));
-            } catch (Exception ignore) {
-            }
-            emitter.complete();
-        });
-        emitter.onError(ex -> {
-            try {
-                emitter.send(SseEmitter.event().name("error").data("{\"error\":\"" + (ex.getMessage() == null ? "error" : ex.getMessage()) + "\"}"));
-            } catch (Exception ignore) {
-            }
-        });
+        // 0L(무한) 대신 60초 기본 타임아웃; 프론트는 자동 재연결 권장
+        SseEmitter emitter = new SseEmitter(60_000L); // +++
 
-        streamService.stream(botId, message, sessionId, new ChatStreamService.Sink() {
+        streamService.scheduleHeartbeat(emitter);
+
+        streamService.stream(message, sessionId, new ChatStreamService.StreamListener() {
             @Override
-            public void onTokenJson(String j) {
+            public void onToken(String tokenChunk) {
                 try {
-                    emitter.send(SseEmitter.event().name("token").data(j));
-                } catch (Exception e) {
-                    emitter.completeWithError(e);
+                    emitter.send(SseEmitter.event().name("token").data(tokenChunk));
+                } catch (Exception ignored) {
                 }
             }
 
             @Override
-            public void onUsageJson(String j) {
+            public void onUsage(ChatUsage usage) {
                 try {
-                    emitter.send(SseEmitter.event().name("usage").data(j));
-                } catch (Exception e) {
-                    emitter.completeWithError(e);
+                    emitter.send(SseEmitter.event().name("usage").data(usage));
+                } catch (Exception ignored) {
                 }
             }
 
             @Override
             public void onDone() {
                 try {
-                    emitter.send(SseEmitter.event().name("done").data("[DONE]"));
-                } catch (Exception ignore) {
+                    emitter.send(SseEmitter.event().name("done").data("ok"));
+                } catch (Exception ignored) {
+                } finally {
+                    emitter.complete(); // +++
                 }
-                emitter.complete();
             }
 
             @Override
-            public void onError(String m) {
+            public void onError(String message) {
                 try {
-                    emitter.send(SseEmitter.event().name("error").data("{\"error\":\"" + m + "\"}"));
-                } catch (Exception ignore) {
+                    emitter.completeWithError(new RuntimeException(message));
+                } catch (Exception ignored) {
                 }
-                emitter.completeWithError(new RuntimeException(m));
             }
 
             @Override
             public void onHeartbeat() {
                 try {
-                    emitter.send(":");
-                } catch (Exception ignore) {
+                    emitter.send(SseEmitter.event().name("keepalive").data(""));
+                } catch (Exception ignored) {
                 }
             }
         });
+
         return emitter;
     }
 }

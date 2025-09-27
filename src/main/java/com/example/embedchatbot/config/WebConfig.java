@@ -1,7 +1,12 @@
 // ============================================================================
-// File: src/main/java/com/example/embedchatbot/config/WebConfig.java
-// Why: CORS 오리진을 ENV/YAML로 제어(하드코딩 제거)
+// PATCH SET 01 — drop-in replacements
+// Place each file at the indicated path, overwriting existing ones.
+// Java 17 / Spring Boot 3.x
 // ============================================================================
+
+/* ----------------------------------------------------------------------------
+File: src/main/java/com/example/embedchatbot/config/WebConfig.java
+---------------------------------------------------------------------------- */
 package com.example.embedchatbot.config;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -16,18 +21,16 @@ import java.util.List;
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
 
-    @Value("${app.cors.allowed-origins:http://localhost:8000,http://127.0.0.1:8000}")
+    /**
+     * Why: 운영/스테이징별 오리진 제어
+     */
+    @Value("${app.cors.allowed-origins:}")
     private String allowedOrigins;
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
-        List<String> origins = StringUtils.hasText(allowedOrigins)
-                ? Arrays.stream(allowedOrigins.split(",")).map(String::trim).filter(StringUtils::hasText).toList()
-                : List.of("http://localhost:8000", "http://127.0.0.1:8000");
+        List<String> origins = StringUtils.hasText(allowedOrigins) ? Arrays.stream(allowedOrigins.split(",")).map(String::trim).filter(StringUtils::hasText).toList() : List.of("http://localhost:8000", "http://127.0.0.1:8000");
 
-        registry.addMapping("/**")
-                .allowedOrigins(origins.toArray(String[]::new))
-                .allowedMethods("*")
-                .allowedHeaders("*");
+        registry.addMapping("/**").allowedOrigins(origins.toArray(String[]::new)).allowedMethods("*").allowedHeaders("*");
     }
 }

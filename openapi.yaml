@@ -1,26 +1,29 @@
 openapi: 3.0.3
-info: { title: Embed Chatbot API, version: "0.1.0" }
+info:
+  title: Embed Chatbot API
+  version: "0.1.0"
 paths:
   /v1/chat/stream:
     get:
-      summary: Stream chat completion
+      summary: Stream chat completion (SSE)
       parameters:
-        - in:
-            query; name:
-              botId; required:
-                true; schema: { type: string, maxLength: 64 }
-        - in:
-            query; name:
-              message; required:
-                true; schema: { type: string, maxLength: 4000 }
-        - in:
-            query; name:
-              sessionId; required:
-                false; schema: { type: string, maxLength: 128 }
+        - in: query
+          name: botId
+          required: true
+          schema: { type: string, maxLength: 64 }
+        - in: query
+          name: message
+          required: true
+          schema: { type: string, maxLength: 4000 }
+        - in: query
+          name: sessionId
+          required: false
+          schema: { type: string, maxLength: 128 }
       responses:
-        '200': { description: Server-Sent Events (token/usage/done) }
+        "200":
+          description: Server-Sent Events stream
       security:
-        - ApiKeyAuth: [ ]
+        - ApiKeyAuth: []
 components:
   securitySchemes:
     ApiKeyAuth:
