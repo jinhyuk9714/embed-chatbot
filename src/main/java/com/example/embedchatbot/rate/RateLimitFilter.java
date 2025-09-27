@@ -1,12 +1,11 @@
-package com.example.embedchatbot.web;
+package com.example.embedchatbot.rate;
 
-import com.example.embedchatbot.config.RateLimitConfig;
 import io.github.bucket4j.Bucket;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.core.annotation.Order;           // +++
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -16,7 +15,7 @@ import java.nio.charset.StandardCharsets;
 
 /** Why: /v1/chat/stream 에 대해 IP+세션 제한 */
 @Component
-@Order(2) // +++ after ApiKeyFilter
+@Order(0)
 public class RateLimitFilter extends OncePerRequestFilter {
     private final RateLimitConfig config;
     public RateLimitFilter(RateLimitConfig config) { this.config = config; }

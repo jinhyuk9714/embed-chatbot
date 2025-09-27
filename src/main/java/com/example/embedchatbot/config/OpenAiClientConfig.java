@@ -1,5 +1,5 @@
 // ============================================================================
-// File: src/main/java/com/example/embedchatbot/config/LlmConfig.java
+// File: src/main/java/com/example/embedchatbot/config/OpenAiClientConfig.java
 // ============================================================================
 package com.example.embedchatbot.config;
 
@@ -15,7 +15,7 @@ import reactor.netty.resources.ConnectionProvider;
 import java.time.Duration;
 
 @Configuration
-public class LlmConfig {
+public class OpenAiClientConfig {
 
     @Bean
     public WebClient openAiWebClient(
